@@ -41,7 +41,6 @@ def signup():
             return render_template("/signup.html") # If password is invalid, sent back to try again
 
         dbHandler.insertUser(username, password, DoB)
-        dbHandler.insertUser(username, password, DoB)
         return render_template("/index.html")
     else:
         return render_template("/signup.html")
