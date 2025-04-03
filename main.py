@@ -4,11 +4,17 @@ from flask import request
 from flask import redirect
 import re
 import user_management as dbHandler
-
+import bcrypt
 
 password_regex = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$')
 app = Flask(__name__)
 
+def set_csp_header():
+    response = app.make_response()
+    response.headers['Content-Security-Policy'] = (
+        "base-uri 'self'; default-src 'self'; style-src 'self'; script-src 'self'; img-src *; media-src 'self'; font-src 'self'; object-src 'self'; child-src 'self'; connect-src 'self'; worker-src 'self'; report-uri /csp_report; frame-ancestors 'none'; form-action 'self'; frame-src 'none';"
+    )
+    return response
 
 @app.route("/success.html", methods=["POST", "GET", "PUT", "PATCH", "DELETE"])
 def addFeedback():
@@ -39,8 +45,10 @@ def signup():
         if not password_regex.match(password): #express not correct password
             
             return render_template("/signup.html") # If password is invalid, sent back to try again
+        
+        hash_password = bcrypt.checkpw(password.encode('utf-8'), bcrypt.gensalt())#generate hash and salt
 
-        dbHandler.insertUser(username, password, DoB)
+        dbHandler.insertUser(username, hash_password, DoB)
         return render_template("/index.html")
     else:
         return render_template("/signup.html")
@@ -48,21 +56,27 @@ def signup():
 
 @app.route("/index.html", methods=["POST", "GET", "PUT", "PATCH", "DELETE"])
 @app.route("/", methods=["POST", "GET"])
+
 def home():
-    if request.method == "GET" and request.args.get("url"):
+     if request.method == "GET" and request.args.get("url"):
         url = request.args.get("url", "")
         return redirect(url, code=302)
-    if request.method == "POST":
+     if request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
-        isLoggedIn = dbHandler.retrieveUsers(username, password)
-        if isLoggedIn:
+        storehash = dbHandler.retrieve(username)#take store hash out to retrieve i think
+        if storehash and bcrypt.checkpw(password.encode('utf-8'), storehash):#revert to check password
             dbHandler.listFeedback()
-            return render_template("/success.html", value=username, state=isLoggedIn)
+            return render_template("/success.html", value=username, state=True)
         else:
-            return render_template("/index.html")
-    else:
+            return render_template("/index.html", error="Try again due to invalid password")
+     else:
         return render_template("/index.html")
+
+@app.route("/csp_report", methods=["POST"])
+def csp_report():
+    app.logger.critical(request.data.decode())
+    return "done"
 
 
 if __name__ == "__main__":
